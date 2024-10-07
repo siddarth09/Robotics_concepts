@@ -14,7 +14,7 @@ using noisy sensor data and control inputs. It alternates between two steps:
 This recursive process allows continuous state estimation in dynamic systems with noise.
 """
 
-class BayesFilter:
+class BayesFilter():
 
     def __init__(self, state_space, control_motion, motion_noise, sensor_measurement, measurement_noise):
         self.state_space = state_space
