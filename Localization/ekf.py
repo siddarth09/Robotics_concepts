@@ -19,9 +19,10 @@ class ExtendedKF():
                          [vy]])
 
     def h(self, X, landmarks):
-        # Measurement model: distance to landmarks
+        # Measurement model: distance 
         px, py = X[0, 0], X[1, 0]
         distances = [np.sqrt((px - lm[0]) ** 2 + (py - lm[1]) ** 2) for lm in landmarks]
+        print(distances)
         return np.array(distances).reshape(-1, 1)
 
     def jacobian_G(self):
@@ -65,8 +66,7 @@ def main():
     # Initial state and covariance
     ekf.X = np.array([[0], [0], [0], [0]])  # Initial position at [0, 0]
    
-
-    # Landmarks from the question 
+    # Landmarks
     landmarks = np.array([[5, 5], [-5, 5]])
 
     # Storage
@@ -77,6 +77,7 @@ def main():
     # Time and control inputs
     time_total = 40
     for t in np.arange(0, time_total + ekf.dt, ekf.dt):
+        # Apply control input based on time
         if t <= 10:
             U = np.array([[1], [0]])  
         elif t <= 20:
@@ -86,25 +87,26 @@ def main():
         else:
             U = np.array([[0], [1]])  
 
-        
-        pose = ekf.g(ekf.X, U)
-        true_trajectory.append([pose[0, 0], pose[1, 0]])
+        # Simulate the true trajectory (noiseless motion)
+        true_state = ekf.g(ekf.X, U)  
+        true_trajectory.append([true_state[0, 0], true_state[1, 0]])
 
-        # Predict step
+        # Predict step of the Kalman filter
         predicted_state = ekf.predict(U)
         predicted_trajectory.append([predicted_state[0, 0], predicted_state[1, 0]])  
 
-        # Simulated measurement (
-        Z = ekf.h(pose, landmarks) + np.random.multivariate_normal([0, 0], ekf.R).reshape(2, 1)
+        Z = ekf.h(true_state, landmarks) + np.random.multivariate_normal([0, 0], ekf.R).reshape(2, 1)
 
-        # Update step
+        # Update step of the Kalman filter using noisy measurements
         updated_state = ekf.update(Z, landmarks)
         estimated_trajectory.append([updated_state[0, 0], updated_state[1, 0]])
 
+    # Convert trajectories to numpy arrays for plotting
     true_trajectory = np.array(true_trajectory)
     estimated_trajectory = np.array(estimated_trajectory)
     predicted_trajectory = np.array(predicted_trajectory)  
 
+    # Plot the true, estimated, and predicted trajectories
     plt.figure()
     plt.plot(true_trajectory[:, 0], true_trajectory[:, 1], 'b-', label='True trajectory')
     plt.plot(estimated_trajectory[:, 0], estimated_trajectory[:, 1], 'r--', label='Estimated trajectory')

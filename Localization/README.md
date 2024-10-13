@@ -57,9 +57,8 @@ where:
 ### Process Model
 The **process model** describes how the state evolves over time. It can be mathematically expressed as:
 
-$$
-\mathbf{x}_{k} = \mathbf{F} \mathbf{x}_{k-1} + \mathbf{B} \mathbf{u}_{k} + \mathbf{w}_{k}
-$$
+$$\mathbf{x}_{k} = \mathbf{F} \mathbf{x}_{k-1} + \mathbf{B} \mathbf{u}_{k} + \mathbf{w}_{k}$$
+
 
 where:
 - $\mathbf{F}$ is the state transition matrix that models the relationship between the previous state and the current state.
