@@ -9,13 +9,12 @@ class ParticleFilter():
         self.sigma_l = sigma_l #The left wheel speed
         self.sigma_r = sigma_r #The right wheel speed
         self.measurement_noise = measurement_noise #Measurement Noise (R=with mean mu, and sigma)
-        self.particles = np.array([(np.random.uniform(-1, 1), 
-                            np.random.uniform(-1, 1),
-                            np.random.uniform(-np.pi, np.pi)) for _ in range(num_particles)])
+        # self.particles = np.array([(np.random.uniform(-1, 1), 
+        #                     np.random.uniform(-1, 1),
+        #                     np.random.uniform(-np.pi, np.pi)) for _ in range(num_particles)])
+        self.particles = np.array([(0,0,0) for _ in range(num_particles)])
 
-        print(f"Particles initialized = \n {len(self.particles)} \n\n")
-        print(f"Shape of the particles = {self.particles.shape}")
-
+        
         
         self.state_space=np.zeros((state_dim,1))
     def sample_speeds(self,vl,vr):
@@ -57,7 +56,7 @@ class ParticleFilter():
         v=0.5*self.r*(vl_noisy+vr_noisy) #linear velocity
         w=0.5 * self.r * (vr_noisy - vl_noisy)/self.w #angular velocity 
         
-        # Approximation for straight line
+        
         if abs(w) < 1e-5:
             dx=v*dt*np.cos(theta)
             dy=v*dt*np.sin(theta)
@@ -92,9 +91,6 @@ class ParticleFilter():
         self.particles=[self.motion_model(particle,vel_l,vel_r,t1,t2) 
                         for particle in self.particles]
         
-        print(f"Predicted particles = \n {self.particles}")
-        
-        
         
     def measurement_model(self, measurement, particle):
         """
@@ -108,39 +104,35 @@ class ParticleFilter():
         Returns:
             float: Likelihood of the measurement given the particle's state
         """
-        print(f"\nParticle state: {particle}") 
         
-        # Extract the position (x, y) from the particle state
-        x, y = particle[:2] 
-   
-        print(f"measurement {measurement}")
         
-        # Compute the Euclidean distance between the particle position and the measurement
+        
+        x, y = particle[:2]        
+       
         new_measurement = np.linalg.norm(np.array([x, y]) - measurement[:1])
-        
-        # Calculate the Gaussian likelihood based on the distance
         gaussian_weight = (1 / (2 * np.pi * self.measurement_noise**2)) * np.exp(-0.5 * (new_measurement**2) / self.measurement_noise**2)
             
-        print(f"Measured distance: {new_measurement}, Likelihood (weight): {gaussian_weight}")
+        # print(f"Measured distance: {new_measurement}, Likelihood (weight): {gaussian_weight}")
         return gaussian_weight
 
     
     def resample_particles(self, weights):
         """Resample particles based on importance weights."""
         
-        # Normalize weights to ensure they sum to 1
+        
         weights = np.array(weights)
-        weights /= np.sum(weights)
+        # weights /= np.sum(weights) 
         
-        print(f"Weights: {weights}")
-        
-        # Resample particles based on the weights
+        weights_sum= np.sum(weights)
+        if weights_sum == 0:
+            print("All weights are zero! Check measurement model.")
+            weights = np.ones(self.num_particles) / self.num_particles  # Reset to uniform
+        else:
+            weights /= weights_sum 
         indices = np.random.choice(range(self.num_particles), size=self.num_particles, p=weights)
-        print(f"Indices")
-        # Create a new set of particles by sampling from the old set using the indices
         resampled_particles = [self.particles[i] for i in indices]
         
-        # Update the particle set with the resampled particles
+        
         self.particles = resampled_particles
 
     
@@ -151,18 +143,17 @@ class ParticleFilter():
         Args:
             measurement (np.array): Noisy Measurement of the robot's position 
         """
-        # Initialize an empty list to collect weights
+        
         weights = []
 
-        # Calculate weights for each particle using the measurement model
+        
         for particle in self.particles:
             weight = self.measurement_model(measurement, particle)
             weights.append(weight)
 
-        # Convert weights to a numpy array
         weights = np.array(weights)
 
-        # Resample particles based on the calculated weights
+        
         self.resample_particles(weights)
         
     def mu_covar(self):
@@ -172,13 +163,15 @@ class ParticleFilter():
         mu=np.mean(positions, axis=0)
         cov=np.cov(positions.T)
         
+        
+        
         return mu, cov
     
-    def plot_particles(self):
-        # Extract positions (x, y) from the particle set
+    def e_plot_particles(self):
+       
         positions = np.array(self.particles)[:, :2]
         
-        # Plot the particles
+        
         plt.figure(figsize=(8, 6))
         plt.scatter(positions[:, 0], positions[:, 1], c='blue', s=5, label='Particles')
         plt.title('Particle Positions at Time t = 10')
@@ -236,7 +229,7 @@ def main():
     print(f"Empirical Covariance Matrix: \n{covariance}")
     
    
-    pf.plot_particles()
+    pf.e_plot_particles()
         
 if __name__=="__main__":
     main()
