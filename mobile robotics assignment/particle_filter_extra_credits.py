@@ -111,7 +111,7 @@ def question_g():
     
     
 def main():
-    question_g()
+    question_f()
     
 if __name__ == '__main__':
     main()

@@ -154,7 +154,35 @@ class ParticleFilter():
         weights = np.array(weights)
 
         
-        self.resample_particles(weights)
+        self.low_variance_resample(weights)
+        
+    def low_variance_resample(self, weights):
+        """Low variance resampling method."""
+        weights = np.array(weights)
+        weights_sum = np.sum(weights)
+        
+        if weights_sum == 0:
+            print("All weights are zero! Check measurement model.")
+            weights = np.ones(self.num_particles) / self.num_particles  
+        else:
+            weights /= weights_sum
+        
+        num_particles = self.num_particles
+        resampled_particles = []
+    
+        r = np.random.uniform(0, 1/num_particles)  
+        cumulative_sum = 0.0
+        index = 0
+        c = weights[0]
+    
+        for i in range(num_particles):
+            U = r + i / num_particles 
+            while U > c:
+                i += 1
+                c += weights[i]
+            resampled_particles.append(self.particles[i])
+    
+        self.particles = resampled_particles
         
     def mu_covar(self):
         
