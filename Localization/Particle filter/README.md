@@ -31,4 +31,7 @@ A **Particle Filter** is an algorithm used to estimate the state of a system (su
    - For visualization, plotting the trajectory (mean positions) over time can show the robot’s estimated path.
 -----
 
-Visualization: TODO
+## Visualization:
+
+![Screencast from 10-29-2024 09_23_06 PM](https://github.com/user-attachments/assets/41946073-a46c-4b85-b39b-daecb9d737a5)
+
