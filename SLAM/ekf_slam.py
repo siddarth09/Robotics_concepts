@@ -11,20 +11,20 @@ from utility.angle import angle_mod
 
 #EKF State covariance 
 
-Cx= np.diag([0.5,0.5,np.deg2rad(30.0)])
+Cx= np.diag([0.5,0.5,np.deg2rad(30.0)])**2 
 
 
 #Simulation params
 
-Q_sim=np.diag([0.2,np.deg2rad(1.0)])**2
-R_sim=np.diag([1.0,np.deg2rad(10.0)])**2 
+Q_sim=np.diag([0.2,np.deg2rad(1.0)])**2  #Sensor noise
+R_sim=np.diag([1.0,np.deg2rad(10.0)])**2  #Process Noise
 
 DT=0.1
 SIM_TIME=50.0
 MAX_RANGE=20.0
 MAHALANOBIS_DIST=2.0 #THRESHOLD FOR MAHALONOBIS DISTANCE
 STATE_SIZE=3 #STATE SPACE (X,Y,YAW)
-CONTROL_SIZE=2 #CONTROL STATE (X,Y)
+LM_SIZE=2 #CONTROL STATE (X,Y)
 
 
 
@@ -36,9 +36,7 @@ def calculate_input():
 
 
 def motion_model(x,u):
-    F = np.array([[1.0, 0, 0],
-                  [0, 1.0, 0],
-                  [0, 0, 1.0]])
+    F = np.eye(3)
 
     B = np.array([[DT * math.cos(x[2, 0]), 0],
                   [DT * math.sin(x[2, 0]), 0],
@@ -51,15 +49,15 @@ def motion_model(x,u):
 
 
 def observation(xTrue,xd,u,landmarks):
-    x_pred = motion_model(xTrue,u)
+    xTrue = motion_model(xTrue,u)
     
     z= np.zeros ((0,3))
     
     for i in range(len(landmarks[:,0])):
-        dx=landmarks[i,0]-x_pred[0,0]
-        dy=landmarks[i,1]-x_pred[1,0]
+        dx=landmarks[i,0]-xTrue[0,0]
+        dy=landmarks[i,1]-xTrue[1,0]
         d = math.hypot(dx,dy)
-        angle=angle_mod(math.atan2(dy,dx)-x_pred[2,0])
+        angle=angle_mod(math.atan2(dy,dx)-xTrue[2,0])
         if d<=MAX_RANGE:
             noise=d+np.random.randn()*Q_sim[0,0]**0.5 
             angle_with_noise=angle+np.random.randn()*Q_sim[1,1]**0.5
@@ -68,28 +66,32 @@ def observation(xTrue,xd,u,landmarks):
             
     new_control=np.array([[
         u[0, 0] + np.random.randn() * R_sim[0, 0] ** 0.5,
-        u[1, 0] + np.random.randn() * R_sim[1, 1] ** 0.5]]).T
+        u[1, 0] + np.random.randn() * R_sim[1, 1] ** 0.5]]).T   # Here R is set up as the process noise which is added to control inputs to simulate noise experienced in the real world. 
 
     
     xd=motion_model(xd,new_control)
     
     
-    return x_pred,z,xd,new_control
+    return xTrue,z,xd,new_control
 
 
 def calculate_n_lm(x):
-    n=int((len(x)-STATE_SIZE)/CONTROL_SIZE)
+    n=int((len(x)-STATE_SIZE)/LM_SIZE)
     return n
 
 
 def G(x, u):
-    Fx = np.hstack((np.eye(STATE_SIZE), np.zeros((STATE_SIZE, CONTROL_SIZE * calculate_n_lm(x)))))
+    Fx = np.hstack((np.eye(STATE_SIZE), np.zeros(
+        (STATE_SIZE, LM_SIZE * calculate_n_lm(x)))))
     
     jF = np.array([[0.0, 0.0, -DT * u[0, 0] * math.sin(x[2, 0])],
                    [0.0, 0.0, DT * u[0, 0] * math.cos(x[2, 0])],
                    [0.0, 0.0, 0.0]], dtype=float)
     
     g = np.eye(len(x)) + Fx.T @ jF @ Fx
+    
+    if calculate_n_lm(x)>0:
+        print(Fx.shape)
     
     return g, Fx
 
@@ -102,7 +104,14 @@ def calc_landmark_position(x,z):
     return measurement
 
 def get_landmark_pose_from_state(x,ind):
-    lm=x[STATE_SIZE+CONTROL_SIZE*ind:STATE_SIZE+CONTROL_SIZE*(ind+1),:]
+    
+    """
+    Returns the position of a given landmark
+    
+    x : The state containing all landmark positions 
+    ind: Landmark ID
+    """
+    lm=x[STATE_SIZE+LM_SIZE*ind:STATE_SIZE+LM_SIZE*(ind+1),:]
     return lm
 
 def search_correspond_landmark_id(xAug,Paug,zi):
@@ -126,26 +135,40 @@ def search_correspond_landmark_id(xAug,Paug,zi):
     return min_id
 
 def calc_innovation(lm,x_est,p_est,z,Lmid):
+    
+    """
+    Calculates the innovation based on expected position and landmark
+    
+    lm: landmark position
+    x_est: Estimated Position
+    p_est: Estimated Covariance
+    z: Read Measurements 
+    LMid: landmark id 
+    
+    """
     delta=lm-x_est[0:2]
     q=(delta.T @ delta)[0,0]
-    z_angle=np.arctan2(delta[1,0],delta[0,0]-x_est[2,0])
+    z_angle=math.atan2(delta[1,0],delta[0,0])-x_est[2,0]
     zp=np.array([[math.sqrt(q),angle_mod(z_angle)]])
-    y=(z-zp).T
+    
+    #zp is expected measurement based on x_est and the expected landmark position
+    
+    y=(z-zp).T  #Innovation
+    y[1]=angle_mod(y[1])
     h=H(q,delta,x_est,Lmid+1)
     S=h@p_est@h.T+Cx[0:2,0:2]
     
     return y,S,h
 
 def H(q,delta,x,i):
+    
+    """
+    Calculates the jacobian of measurement function 
+    """
     sq=math.sqrt(q)
-    g=np.array([[-sq * delta[0, 0], 
-                 - sq * delta[1, 0],
-                 0, 
-                 sq * delta[0, 0], 
-                 sq * delta[1, 0]],
-                
-                [delta[1, 0], - delta[0, 0],
-                 - q, - delta[1, 0], delta[0, 0]]])
+    g=np.array([[-sq * delta[0, 0], - sq * delta[1, 0], 0, sq * delta[0, 0], sq * delta[1, 0]],
+                  [delta[1, 0], - delta[0, 0], - q, - delta[1, 0], delta[0, 0]]])
+
     g=g/q 
     
     nLM=calculate_n_lm(x)
@@ -179,10 +202,10 @@ def ekf_slam (x_est,p_est,u,z):
             print("New landmark")
             #Extend State and covariance matrix 
             
-            xAug = np.vstack((x_est, calc_landmark_position(x_est, z[iz, 0:2])))
+            xAug = np.vstack((x_est, calc_landmark_position(x_est, z[iz, :])))
 
-            pAug = np.vstack((np.hstack((p_est, np.zeros((len(x_est), CONTROL_SIZE)))),
-                              np.hstack((np.zeros((CONTROL_SIZE, len(x_est))), initP))))
+            pAug = np.vstack((np.hstack((p_est, np.zeros((len(x_est), LM_SIZE)))),
+                              np.hstack((np.zeros((LM_SIZE, len(x_est))), initP))))
             
             x_est=xAug
             p_est=pAug
