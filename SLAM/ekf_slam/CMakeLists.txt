@@ -17,7 +17,7 @@ find_package(nav_msgs REQUIRED)
 # find_package(<dependency> REQUIRED)
 
 install(PROGRAMS 
-        src/motion_model.py
+        src/ekf_slam.py
         src/grid_map.py
         DESTINATION lib/${PROJECT_NAME})
 
