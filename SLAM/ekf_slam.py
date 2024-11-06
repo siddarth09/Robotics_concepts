@@ -277,13 +277,17 @@ def main(show_animation):
                          xEst[STATE_SIZE + i * 2 + 1], "xg")
 
             plt.plot(hxTrue[0, :],
-                     hxTrue[1, :], "-b")
+                     hxTrue[1, :], "-b", label="True Trajectory")
             plt.plot(hxDR[0, :],
-                     hxDR[1, :], "-k")
+                     hxDR[1, :], "-k", label="Dead Reckoning Trajectory")
             plt.plot(hxEst[0, :],
-                     hxEst[1, :], "-r")
+                     hxEst[1, :], "-r",label="SLAM")
             plt.axis("equal")
             plt.grid(True)
+            plt.legend(loc='upper right')  # Customize the location of the legend
+            plt.title('EKF based SLAM')
+            plt.xlabel('X Position')
+            plt.ylabel('Y Position')
             plt.pause(0.001)
 
 
