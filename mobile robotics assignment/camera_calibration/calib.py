@@ -5,10 +5,7 @@ import os
 import matplotlib.pyplot as plt
 
 def calibrate(imgPath,showPics=True):
-    # Read image from a folder
     
-    
-    # Check if images are found
     if len(imgPath) == 0:
         print("No images found in the specified directory.")
         return
@@ -26,7 +23,7 @@ def calibrate(imgPath,showPics=True):
         if img is None:
             print(f"Failed to load image: {file}")
             continue
-        img = cv.resize(img, (500, 500))
+        # img = cv.resize(img, (512,512))
         gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
         
         # Finding chessboard corners
@@ -75,7 +72,7 @@ def calibrate(imgPath,showPics=True):
     
     print(f"Comparing martix : \n {camera_matrix}\n and \n {new_camera_matrix}")
     np.savez("calibration_data.npz", 
-         camera_matrix=new_camera_matrix, 
+         camera_matrix=camera_matrix, 
          distortion_coeff=distortion_coeff, 
          rotation=rotation, 
          translation=translation, 

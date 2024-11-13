@@ -24,7 +24,7 @@ def apriltag_detection(image):
     calibration_matrix = np.array([[fx], [fy], [cx], [cy]])
     print("Detecting AprilTags...")
     img = cv2.imread(image)
-    img = cv2.resize(img, (500, 500))
+    # img = cv2.resize(img, (500, 500))
     
     if img is None:
         print("Image not found or unable to read.")
@@ -35,7 +35,7 @@ def apriltag_detection(image):
     options = at.DetectorOptions(families="tag36h11")
     detector = at.Detector(options)
     results = detector.detect(gray)
-
+    
     corners = None
     for r in results:
         (ptA, ptB, ptC, ptD) = r.corners
@@ -56,59 +56,25 @@ def apriltag_detection(image):
         if tag_id == 0:  # Process only tag 0
             print("Tag DETECTED: {}".format(tag_id))
             # Transformation matrix
-            T, _, _ = detector.detection_pose(r, calibration_matrix, 0.159)
+            T, _, _ = detector.detection_pose(r, calibration_matrix, 0.01)
             print(f"Transformation matrix from camera frame to tag frame: \n {T} \n")
 
             # Extract 2D corners in the image for the detected tag
             corners = r.corners
-
+    
     # Display the result
     cv2.imshow("AprilTags Detection", img)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
-    
-    return K, T, corners
 
-def reprojection_error(params, K, P_3d, u_2d):
-    """
-    Calculate the sum of squared reprojection errors.
+    return K, T,err_r,corners
 
-    params: flattened array containing the rotation matrix (R) and translation vector (t).
-    K: Camera matrix.
-    P_3d: 3D points in the world coordinate system.
-    u_2d: Observed 2D points in the image plane.
-    """
-    # Extract R and t from params (flattened array)
-    R = params[:9].reshape(3, 3)  # First 9 values represent the rotation matrix (3x3)
-    t = params[9:]  # The remaining values represent the translation vector (3,)
-
-    # Initialize error
-    total_error = 0
-    epsilon = 1e-9  # Small value to avoid divide by zero
-
-    for i in range(len(P_3d)):
-        # Project the 3D point to the camera's coordinate system
-        p_i = np.dot(R, P_3d[i]) + t
-
-        # Project onto the image plane using the camera matrix
-        u_i = np.dot(K, p_i) 
-       
-        u_i = u_i[:2] / (u_i[2] + epsilon)  
-
-        
-        error = np.linalg.norm(u_i - u_2d[i])
-        # print(f"error at  point {i}: {error}")
-
-
-    return error
-
-
-def pose_estimation(K, T, corners):
+def pose_estimation(K, T, err,corners):
     fx, fy, cx, cy = K[0, 0], K[1, 1], K[0, 2], K[1, 2]
     calibration = gt.Cal3_S2(fx, fy, 0, cx, cy)
 
     # Define the 3D coordinates of the AprilTag's corners in the world frame
-    tag_size = 0.159  # Size of the AprilTag in meters
+    tag_size = 0.01 # Size of the AprilTag in meters
     half_size = tag_size / 2
     tag_corners_3d = np.array([
         [-half_size, -half_size, 0],
@@ -116,31 +82,58 @@ def pose_estimation(K, T, corners):
         [half_size, half_size, 0],
         [half_size, -half_size, 0]
     ])
+    
+    # Set up GTSAM factor graph
+    graph = gt.NonlinearFactorGraph()
+    noise = gt.noiseModel.Isotropic.Sigma(3,1.0)  # Noise model for pose
+    initial_pose = gt.Pose3(gt.Rot3.RzRyRx(0.3,0.2,0.2), gt.Point3(0.0075,0.0075,-0.25))  # Initial guess for the pose
+    pose_symbol=gt.symbol('x',0)
+    # graph.add(gt.PriorFactorPose3(0, initial_pose, noise))
 
-    # Extract 2D corners from the image and store them
-    u_2d = np.array(corners)
+    # Create initial estimate for the camera pose
+    initial_estimate = gt.Values()
+    initial_estimate.insert(pose_symbol, initial_pose)
+    # graph.add(gt.PriorFactorPose3(pose_symbol, initial_pose, noise))
 
-    # Set up optimization
-    initial_params = np.hstack([np.eye(3).flatten(), np.zeros(3)])  # Initial guess for [R|t]
+    # Creating Initial estimates for 3D points
+    for i, corner3d in enumerate(tag_corners_3d):
+        point_symbol=gt.symbol('p',i)
+        initial_estimate.insert(point_symbol,corner3d)
+        graph.add(gt.PriorFactorPoint3(point_symbol,corner3d,noise))
+    corner2d_arr = [gt.Point2(corner[0], corner[1]) for corner in corners]
+    # Add projection factors for each pair of 2D-3D correspondences
+    for i, corner2d in enumerate(corners):
+        corner2d_array = gt.Point2(corner2d[0],corner2d[1])
+        point_symbol=gt.symbol('p',i)
+        factor = gt.GenericProjectionFactorCal3_S2(
+            corner2d_array, 
+            gt.noiseModel.Isotropic.Sigma(2, 10.0), 
+            pose_symbol, 
+            point_symbol, 
+            calibration
+        )
+        graph.add(factor)
+        
+        
+    params=gt.LevenbergMarquardtParams()
+    params.setMaxIterations(100)
+    params.setVerbosity("TERMINATION")
+    params.setlambdaInitial(1e-9)
+    # Optimize using Levenberg-Marquardt optimizer
+    optimizer = gt.LevenbergMarquardtOptimizer(graph, initial_estimate,params)
+    result = optimizer.optimize()
 
-    # Optimize the pose (R,t) using the reprojection error function
-    result = minimize(reprojection_error, initial_params, args=(K, tag_corners_3d, u_2d), method='BFGS')
+    # Get the optimized pose
+    optimized_pose = result.atPose3(pose_symbol)
+    print("Optimized Pose:\n", optimized_pose)
+    print(f"The reprojection error is {graph.error(result)}")
 
-    # Extract optimized R and t from the result
-    optimized_params = result.x
-    optimized_R = optimized_params[:9].reshape(3, 3)
-    optimized_t = optimized_params[9:]
-
-    print("Optimized Rotation Matrix:\n", optimized_R)
-    print("Optimized Translation Vector:\n", optimized_t)
-    print("Final Reprojection Error:", result.fun)
-
-
+   
 def main():
     image_path = "/home/siddarth/ros2ws/src/Robotics_concepts/mobile robotics assignment/frame_0.jpg"
-    K, T, corners = apriltag_detection(image_path)
+    K, T,err,corners = apriltag_detection(image_path)
     if corners is not None:
-        pose_estimation(K, T, corners)
+        pose_estimation(K, T, err,corners)
 
 if __name__ == "__main__":
     main()

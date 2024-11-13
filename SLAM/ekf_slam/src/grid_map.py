@@ -12,7 +12,7 @@ class OccupancyGridMapping(Node):
         super().__init__('occupancy_grid_mapping')
         
         # Initialize parameters and variables as before
-        self.declare_parameter('grid_resolution', 0.01)  #Smaller value better accuracy in map
+        self.declare_parameter('grid_resolution', 0.05)  #Smaller value better accuracy in map
         self.declare_parameter('grid_size', 100) #Number of grids on each side of the map
         
         
